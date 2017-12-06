@@ -5,8 +5,8 @@ This example authenticates against Azure AD, either using the interactive author
 
 
 ## environment
-
-### Required (upgraded to V2.0 endpoint)
+## https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-v2-compare
+### Required
 
 The Azure AD Directory (or Tenant) where your App is registered (you can see this value in the AAD blade, in "Properties"):
 

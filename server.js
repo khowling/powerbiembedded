@@ -1,8 +1,12 @@
 const fs = require('fs'),
 	url = require('url'),
 	http = require('http'), https = require('https'),
-	serveStatic = require('serve-static'),
-	serve = serveStatic('public', {'index': ['index.html']})
+	express = require('express')
+
+var app = express();
+app.use(express.static('public'))
+
+app.set('view engine', 'ejs');
 
 const
 	client_id = process.env.CLIENT_ID,
@@ -13,13 +17,15 @@ const
 	embed_username = process.env.EMBED_USERNAME,
 	embed_password = process.env.EMBED_PASSWORD,
 	aad_hostname = 'login.microsoftonline.com',
-	powerbi_service = 'https://analysis.windows.net/group.read.all', // 'https://graph.microsoft.com/mail.send', 
-	aad_token_endpoint = `/${client_directory}/oauth2/v2.0/token`,
-	aad_auth_endpoint = `/${client_directory}/oauth2/v2.0/authorize`,
-	powerbi_group_name = process.env.POWERBI_GROUP_NAME,
-	powerbi_dashboard_name = process.env.POWERBI_DASHBOARD_NAME
+	powerbi_service_resource_v1 = 'https://analysis.windows.net/powerbi/api',
+	powerbi_service_scope_v2 = 'https://graph.microsoft.com/mail.send', 
+	aad_token_endpoint = `/${client_directory}/oauth2/token`,
+	aad_auth_endpoint = `/${client_directory}/oauth2/authorize`,
+	aad_token_endpoint_v2 = `/${client_directory}/oauth2/v2.0/token`,
+	aad_auth_endpoint_v2 = `/${client_directory}/oauth2/v2.0/authorize`,
+	powerbi_group_name = process.env.POWERBI_GROUP_NAME
 
-let	current_token_data = {}, current_embed_dashboard = {}
+let	current_token_data
 
 const getAccessToken = (hostname, creds) => {
 	console.log (`getAccessToken ("${hostname}")`)
@@ -31,13 +37,13 @@ const getAccessToken = (hostname, creds) => {
 			flow_body = `client_id=${client_id}&scope=${encodeURIComponent('https://analysis.windows.net/')}.default&client_secret=${encodeURIComponent(client_secret)}&grant_type=client_credentials`
 		} else if (creds.user && creds.password) {
 			console.log ('password_flow (server-to-server, no user interaction')
-			flow_body = `client_id=${client_id}&scope=${encodeURIComponent(powerbi_service)}&username=${encodeURIComponent(creds.user)}&password=${creds.password}&grant_type=password`
+			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&username=${encodeURIComponent(creds.user)}&password=${creds.password}&grant_type=password`
 		} else if (creds.code) {
 			console.log ('authorization_code_flow grant_type=authorization_code (supports refresh, user interaction, server can keep secret: ') //+ creds.code)
-			flow_body = `client_id=${client_id}&scope=${encodeURIComponent(powerbi_service)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
+			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
 		} else if (creds.refresh_token) {
 			console.log ('refresh_flow grant_type=refresh_token')
-			flow_body = `client_id=${client_id}&scope=${encodeURIComponent(powerbi_service)}&refresh_token=${encodeURIComponent(creds.refresh_token)}&grant_type=refresh_token`
+			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&refresh_token=${encodeURIComponent(creds.refresh_token)}&grant_type=refresh_token`
 		}
 
 		let	authcode_req = https.request({
@@ -61,8 +67,7 @@ const getAccessToken = (hostname, creds) => {
 						reject({code: res.statusCode, message: rawData})
 					} else {
 						console.log ('successfully updated "current_token_data": ')// + rawData)
-						current_token_data = JSON.parse(rawData)
-						accept()
+						accept(JSON.parse(rawData))
 					}
 				})
 
@@ -75,7 +80,7 @@ const getAccessToken = (hostname, creds) => {
 }
 
 
-const getDashboard = (token) => {
+const getDashboard = (token, did = null) => {
 	console.log ('getDashboard ()')
 	return new Promise((accept, reject) => {
 
@@ -95,7 +100,7 @@ const getDashboard = (token) => {
 			dres.on('end', () => {
 				if(!(dres.statusCode === 200 || dres.statusCode === 201)) {
 					console.log (`getDashboard error ${dres.statusCode} : ${dres.statusMessage} : ${rawData}`)
-					reject ({code: dres.statusCode, message: dres.statusMessage})
+					reject ({code: `getDashboard ${dres.statusCode}`, message: dres.statusMessage})
 				} else {
 
 					let groups = JSON.parse(rawData).value;
@@ -121,24 +126,27 @@ const getDashboard = (token) => {
 							dres.on('end', () => {
 								if(!(dres.statusCode === 200 || dres.statusCode === 201)) {
 									console.log (`getDashboard error ${dres.statusCode} : ${dres.statusMessage} : ${rawData}`)
-									reject ({code: dres.statusCode, message: dres.statusMessage})
+									reject ({code: `getDashboard - ${dres.statusCode}`, message: dres.statusMessage})
 								} else {
 									let dashboards = JSON.parse(rawData).value;
 									console.log (`successfully got all dashboards ${JSON.stringify(dashboards)}`)
-
-									let selected_dashboard = dashboards.find(g => g.displayName == powerbi_dashboard_name)
-									if (!selected_dashboard) {
-										reject({code: 400, message: `cannot find powerbi dashboard ${powerbi_dashboard_name} in subscription`})
+									if (did) {
+										let selected_dashboard = dashboards.find(g => g.id == did)
+										if (!selected_dashboard) {
+											reject({code: 400, message: `cannot find powerbi dashboard ${did} in subscription`})
+										} else {
+											accept(selected_dashboard)
+										}
 									} else {
-										current_embed_dashboard = selected_dashboard
-										accept()
+										console.log (`getDashboard - returning ${dashboards.length} dashboards`)
+										accept(dashboards)
 									}
 								}
 							})
 							
 						}).on('error', (e) => {
 							console.log ('getDashboard error ' + JSON.stringify(e))
-							reject({code: 400, message: e})
+							reject({code: `getDashboard: 400`, message: e})
 						})
 
 					}
@@ -148,118 +156,115 @@ const getDashboard = (token) => {
 			
 		}).on('error', (e) => {
 			console.log ('getDashboard error ' + JSON.stringify(e))
-			reject({code: 400, message: e})
+			reject({code: `getDashboard: 400`, message: e})
 		})
 	})
 }
-// HTTP Server to accept incomming MPEG-TS Stream from ffmpeg
-var port = process.env.PORT || 5000,
-	httpServer = http.createServer( (request, response) => {
-	serve(request, response, () => {
-		
-		if (request) {
-			
-			let req_url = url.parse(request.url)
-			console.log ('checking ')
-			if (req_url.pathname === "/login") {
-				console.log ('got login')
-				let code_url = `https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&scope=${encodeURIComponent(powerbi_service)}&response_type=code&prompt=consent`
-				console.log (`url: ${code_url}`)
-				response.writeHead(302, {Location: code_url})
-				response.end();
-			} else if (req_url.pathname === "/callback") {
-				console.log ('/callback - looking for authorisation code')
-				let params = new Map()
-				req_url.query.split('&').forEach((p) => { let kv = p.split('='); params.set(kv[0], kv[1])})
-				if (params.has('code')) {
-					let code = params.get('code')
-					console.log ('/callback - got code, calling getAccessToken (authflow)')
-					getAccessToken (aad_hostname, {code: code}).then(() => {
-						
-						getDashboard(current_token_data.access_token).then (() => {
-							response.writeHead(301, {Location: "/"});
-							response.end();
-						}, (err) => {
-							console.log ('getDashboard error ' + err.message)
-							response.writeHead(err.code, err.message) 
-							response.end()
-						})
-					}, (err) => {
-						console.log ('getAccessToken error ' + err.message)
-						response.writeHead(err.code, err.message) 
-						response.end()
-					})
-				} else {
-					response.writeHead(400, 'no code') ;
-					response.end();
-				}
-			} else if (req_url.pathname === "/aadauth") {
-				if (request.method === "POST") {
-					console.log ('NOT USED! getting aad auth token')
 
-					let bodycreds = ''
-					request.on('data', chunk => {
-						bodycreds+= chunk
-					});
-					request.on('end', () => {
-						console.log(`No more data ${bodycreds}`);
-						response.writeHead(400, "not longer used") 
-						response.end()
-					})
-				} else { // GET
-					console.log ('/aadauth - GET')
-					if(current_token_data.access_token && current_embed_dashboard.embedUrl) {
-						console.log ('/aadauth - already got access_token and dashbaord, do we need to refresh?')
-						if (current_token_data.refresh_token) {
-							// refresh
-							getAccessToken (aad_hostname, {refresh_token: current_token_data.refresh_token}).then(() => {
-								response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
-							}, (err) => {
-								console.log ('getAccessToken error ' + err.message)
-								response.writeHead(err.code, err.message) 
-								response.end()
-							})
-						} else {
-							response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
-						}
-					} else if (embed_username && embed_password){
-						console.log ('/aadauth - got embedded credentials, use password flow')
-						getAccessToken (aad_hostname, {user: embed_username, password: embed_password}).then(() => {
+let authenticated = false
+// Startup
+/*
+if(current_token_data.access_token && current_embed_dashboard.embedUrl) {
+	console.log ('startup - already got access_token and dashbaord, do we need to refresh?')
+	if (current_token_data.refresh_token) {
+		// refresh
+		getAccessToken (aad_hostname, {refresh_token: current_token_data.refresh_token}).then(() => {
+			response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
+		}, (err) => {
+			console.log ('getAccessToken error ' + err.message)
+			response.writeHead(err.code, err.message) 
+			response.end()
+		})
+	} else {
+		response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
+	}
+} else if (embed_username && embed_password){
+	console.log ('/aadauth - got embedded credentials, use password flow')
+	getAccessToken (aad_hostname, {user: embed_username, password: embed_password}).then(() => {
 
-							getDashboard(current_token_data.access_token).then (() => {
-								response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
-							}, (err) => {
-								console.log ('getDashboard error ' + err.message)
-								response.writeHead(err.code, err.message) 
-								response.end()
-							})
-						}, (err) => {
-							console.log ('getAccessToken error ' + err.message)
-							response.writeHead(err.code, err.message) 
-							response.end()
-						})
-					} else if (use_sp_auth) {
-						console.log ('/aadauth - SP Auth')
-						getAccessToken (aad_hostname).then(() => {
-							getDashboard(current_token_data.access_token).then (() => {
-								response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
-							}, (err) => {
-								response.writeHead(err.code, err.message) 
-								response.end()
-							})
-						})
-					} else {
-						console.log ('/aadauth - send url to initialite interactive authorization flow')
-						response.end('{}')
-					}  
-				}
-			} else {
-				response.writeHead(404) ;
-				response.end();
-			}
-		}
+		getDashboard(current_token_data.access_token).then (() => {
+			response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
+		}, (err) => {
+			console.log ('getDashboard error ' + err.message)
+			response.writeHead(err.code, err.message) 
+			response.end()
+		})
+	}, (err) => {
+		console.log ('getAccessToken error ' + err.message)
+		response.writeHead(err.code, err.message) 
+		response.end()
 	})
-	
-}).listen(port);
-console.log (`listening to port ${port}`)
+} else if (use_sp_auth) {
+	console.log ('/aadauth - SP Auth')
+	getAccessToken (aad_hostname).then(() => {
+		getDashboard(current_token_data.access_token).then (() => {
+			response.end(JSON.stringify(Object.assign({embed_token: current_token_data.access_token}, current_embed_dashboard)))
+		}, (err) => {
+			response.writeHead(err.code, err.message) 
+			response.end()
+		})
+	})
+}
+*/
 
+app.get('/auth', function(req, res) {
+	res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent`)
+})
+
+app.get('/', function(req, res) {
+	if (!current_token_data) {
+		res.render('result', {status: "Not Authenticated", message: url.parse(req.url, true).query["message"] || "Press Authenticate to login with PowerBI Pro Master User"})
+	} else { 
+		getDashboard(current_token_data.access_token).then ((dashbaords) => {
+			res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
+		}, (err) => {
+			res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
+		})
+	}
+})
+
+app.get('/db/:dashboard', function(req, res) {
+	let did = req.params.dashboard
+	if (!did) {
+		res.render('result',{status: "ERROR", message: "Please provide dashboard Id"})
+	} else 	if (!current_token_data) {
+		res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent&state=${did}`)
+	} else {
+		getDashboard(current_token_data.access_token, did).then ((dashbaord) => {
+			res.render('embedded', {access_token: current_token_data.access_token, embed_url: dashbaord.embedUrl})
+		}, (err) => {
+			res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
+		})
+	}
+})
+
+app.get('/callback', function(req, res) {
+	console.log ('/callback - looking for authorisation code')
+	let code = url.parse(req.url, true).query["code"]
+
+	if (code) {
+		
+		console.log ('/callback - got code, calling getAccessToken (authflow)')
+		getAccessToken (aad_hostname, {code: code}).then((auth) => {
+			current_token_data = auth
+			console.log ('getAccessToken success ')
+			res.redirect ('/')
+			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
+
+		}, (err) => {
+			current_token_data = null
+			console.log ('getAccessToken error ' + err.message)
+			res.redirect (`/?message=${encodeURIComponent(`${err.code}: ${err.message}`)}`)
+			//res.render('result', {status: "ERROR", message: `${err.code}: ${err.message}`})
+		})
+	} else {
+		current_token_data = null
+		console.log ('callback error: No authorisation code')
+		res.redirect (`/?message=${encodeURIComponent("No authorisation code")}`)
+		//res.render('result',  {status: "ERROR", message: `no code`})
+	}
+})
+
+const port = process.env.PORT || 5000
+app.listen(port);
+console.log('port is the magic port');

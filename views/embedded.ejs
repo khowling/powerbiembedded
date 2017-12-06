@@ -1,0 +1,23 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <div id="dashboardContainer"></div>
+
+    <script src="/powerbi.js"></script>
+    <script>
+        window.onload = function () {
+            var dashboard = powerbi.embed(document.getElementById('dashboardContainer'), {
+                type: 'dashboard',
+                accessToken: "<%= access_token %>",
+                embedUrl: "<%= embed_url %>"
+            });
+        } 
+
+        client.onerror = function (e) {
+            console.log("Network Error: " + this.statusText);
+        }
+    </script>
+</body>
+</html>
