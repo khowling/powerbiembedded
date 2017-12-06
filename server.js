@@ -207,6 +207,8 @@ if(current_token_data.access_token && current_embed_dashboard.embedUrl) {
 }
 */
 
+const SECRET_NAME = "ftembed"
+
 app.get('/auth', function(req, res) {
 	res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent`)
 })
@@ -260,15 +262,14 @@ app.get('/callback', function(req, res) {
 					msi_res.on('end', () => {
 						console.log (`msi end ${msi_res.statusCode}`)
 						if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
-							let keyvault_access = JSON.parse(msi_data),
-								secret_name="rf_token"
+							let keyvault_access = JSON.parse(msi_data)
 								
 							console.log (`keyvault_access ${JSON.stringify(keyvault_access)}`)
 
 							let putreq = https.request({
 								method: "PUT",
 								hostname : "techdashboard.vault.azure.net",
-								path : `/secrets/${secret_name}?api-version=2016-10-01`,
+								path : `/secrets/${SECRET_NAME}?api-version=2016-10-01`,
 								headers: {
 									"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`
 								}}, (res) => {
