@@ -113,7 +113,7 @@ const getDashboard = (token, did = null) => {
 
 						https.get({
 							hostname: 'api.powerbi.com',
-							path: `/v1.0/myorg/groups/${selected_group.id}/dashboards`,
+							path: `/v1.0/myorg/groups/${selected_group.id}/reports`,
 							headers: {
 								"Authorization": `Bearer ${token}`
 							}
