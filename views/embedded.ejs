@@ -11,7 +11,11 @@
             var dashboard = powerbi.embed(document.getElementById('dashboardContainer'), {
                 type: 'report',
                 accessToken: "<%= access_token %>",
-                embedUrl: "<%= embed_url %>"
+                embedUrl: "<%= embed_url %>",
+                settings: {
+                    filterPaneEnabled: false,
+                    navContentPaneEnabled: false
+                }
             });
         } 
 
