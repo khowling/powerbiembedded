@@ -247,6 +247,86 @@ app.get('/callback', function(req, res) {
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			current_token_data = auth
+			// store refresh_token in vault
+			if (process.env.MSI_ENDPOINT) {
+				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
+				console.log (`got MSI_ENDPOINT calling ${JSON.stringify(keyvault_token_request)}`)
+				https.get(keyvault_token_request, (msi_res) => {
+					let msi_data = '';
+					msi_res.on('data', (d) => {
+						msi_data+= d
+					});
+		
+					msi_res.on('end', () => {
+						console.log (`msi end ${msi_res.statusCode}`)
+						if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
+							let keyvault_access = JSON.parse(msi_data),
+								secret_name="rf_token"
+								
+							console.log (`keyvault_access ${JSON.stringify(keyvault_access)}`)
+
+							let putreq = https.request({
+								method: "PUT",
+								hostname : "techdashboard.vault.azure.net",
+								path : `/secrets/${secret_name}?api-version=2016-10-01`,
+								headers: {
+									"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`
+								}}, (res) => {
+									let rawData = '';
+									res.on('data', (chunk) => {
+										rawData += chunk
+									})
+				
+									res.on('end', () => {
+										console.log (`write secret ${res.statusCode} : ${rawData}`)
+										if (res.statusCode === 301 || res.statusCode === 302) {
+										}
+									
+									})
+								})
+							putreq.write(`{"value": "${auth.refresh_token}"`);
+							putreq.end();
+								
+						}
+					})
+				})
+				
+			}
+			let	authcode_req = https.request({
+					hostname: hostname,
+					path: aad_token_endpoint,
+					method: 'POST',
+					headers: {
+						'Content-Type': "application/x-www-form-urlencoded",
+						'Content-Length': Buffer.byteLength(flow_body)
+					}
+				}, (res) => {
+					let rawData = '';
+					res.on('data', (chunk) => {
+						rawData += chunk
+					})
+
+					res.on('end', () => {
+						if (res.statusCode === 301 || res.statusCode === 302) {
+							getAccessToken (url.parse(res.headers.location).hostname, creds).then((succ) => accept(succ), (err) => reject(err))
+						} else if(!(res.statusCode === 200 || res.statusCode === 201)) {
+							reject({code: res.statusCode, message: rawData})
+						} else {
+							console.log ('successfully updated "current_token_data": ')// + rawData)
+							accept(JSON.parse(rawData))
+						}
+					})
+
+				}).on('error', (e) => {
+					reject({code: 400, message: e})
+				})
+			authcode_req.write(flow_body)
+			authcode_req.end()
+
+
+
+			//
+
 			console.log ('getAccessToken success ')
 			res.redirect ('/')
 			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
