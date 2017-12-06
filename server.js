@@ -246,7 +246,7 @@ app.get('/callback', function(req, res) {
 		
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
-			current_token_data = auth
+			
 			// store refresh_token in vault
 			if (process.env.MSI_ENDPOINT) {
 				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
@@ -291,46 +291,12 @@ app.get('/callback', function(req, res) {
 					})
 				})
 				
+			} else {
+				current_token_data = auth
+				console.log ('getAccessToken success ')
+				res.redirect ('/')
+				//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
 			}
-			let	authcode_req = https.request({
-					hostname: hostname,
-					path: aad_token_endpoint,
-					method: 'POST',
-					headers: {
-						'Content-Type': "application/x-www-form-urlencoded",
-						'Content-Length': Buffer.byteLength(flow_body)
-					}
-				}, (res) => {
-					let rawData = '';
-					res.on('data', (chunk) => {
-						rawData += chunk
-					})
-
-					res.on('end', () => {
-						if (res.statusCode === 301 || res.statusCode === 302) {
-							getAccessToken (url.parse(res.headers.location).hostname, creds).then((succ) => accept(succ), (err) => reject(err))
-						} else if(!(res.statusCode === 200 || res.statusCode === 201)) {
-							reject({code: res.statusCode, message: rawData})
-						} else {
-							console.log ('successfully updated "current_token_data": ')// + rawData)
-							accept(JSON.parse(rawData))
-						}
-					})
-
-				}).on('error', (e) => {
-					reject({code: 400, message: e})
-				})
-			authcode_req.write(flow_body)
-			authcode_req.end()
-
-
-
-			//
-
-			console.log ('getAccessToken success ')
-			res.redirect ('/')
-			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
-
 		}, (err) => {
 			current_token_data = null
 			console.log ('getAccessToken error ' + err.message)
