@@ -278,7 +278,7 @@ app.get('/callback', function(req, res) {
 									})
 				
 									res.on('end', () => {
-										console.log (`write secret  ${res.statusCode} : ${rawData}`)
+										console.log (`write secret ${res.statusCode} : ${rawData}`)
 										if (res.statusCode === 301 || res.statusCode === 302) {
 										}
 									
