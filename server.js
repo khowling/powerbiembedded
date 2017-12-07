@@ -169,7 +169,7 @@ const getDashboard = (did = null) => {
 					if (current_token_data.refresh_token) {
 						getAccessToken (aad_hostname, {refresh_token: current_token_data.refresh_token}).then((auth) => {
 							console.log ('getDashboard - call getDashbaord again with refreshed token')
-							getDashboard (auth, did)
+							getDashboard (did).then((succ) => accept(succ), (err) => reject(err))
 						}, (err) => {
 							console.log ('getDashboard refresh failed, rejecting with:  ' + err.message)
 							reject (err)
