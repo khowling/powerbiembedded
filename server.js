@@ -266,7 +266,7 @@ app.get('/callback', function(req, res) {
 							let keyvault_access = JSON.parse(msi_data),
 								request_body = `{"value": "${auth.refresh_token}"`
 								
-							console.log (`keyvault_access ${JSON.stringify(keyvault_access)}`)
+							console.log (`keyvault_access ${JSON.stringify(keyvault_access)} : body: ${request_body}`)
 
 							let putreq = https.request({
 								method: "PUT",
