@@ -86,7 +86,7 @@ const getAccessToken = (hostname, creds) => {
 										let keyvault_access = JSON.parse(msi_data),
 											request_body = JSON.stringify({"value": authdata.refresh_token })
 											
-										console.log (`getAccessToken - writing to keyvault_access ${JSON.stringify(keyvault_access)} : body: ${request_body}`)
+										console.log (`getAccessToken - writing to keyvault_access,  body: ${request_body}`)
 
 										let putreq = https.request({
 											method: "PUT",
@@ -146,7 +146,7 @@ const getAccessToken = (hostname, creds) => {
 
 
 
-const getDashboard = (token, did = null) => {
+const getDashboard = (did = null) => {
 	console.log (`getDashboard (${did})`)
 	return new Promise((accept, reject) => {
 
@@ -154,7 +154,7 @@ const getDashboard = (token, did = null) => {
 			hostname: 'api.powerbi.com',
 			path: `/v1.0/myorg/groups`,
 			headers: {
-				"Authorization": `Bearer ${token.access_token}`
+				"Authorization": `Bearer ${current_token_data.access_token}`
 			}
 		}, (dres) => {
 			let rawData = '';
@@ -166,8 +166,8 @@ const getDashboard = (token, did = null) => {
 				if (dres.statusCode === 403) {
 					// access_token expired
 					console.log ('getDashboard - got 403, do we need to refresh?')
-					if (token.refresh_token) {
-						getAccessToken (aad_hostname, {refresh_token: token.refresh_token}).then((auth) => {
+					if (current_token_data.refresh_token) {
+						getAccessToken (aad_hostname, {refresh_token: current_token_data.refresh_token}).then((auth) => {
 							console.log ('getDashboard - call getDashbaord again with refreshed token')
 							getDashboard (auth, did)
 						}, (err) => {
@@ -195,7 +195,7 @@ const getDashboard = (token, did = null) => {
 							hostname: 'api.powerbi.com',
 							path: `/v1.0/myorg/groups/${selected_group.id}/reports`,
 							headers: {
-								"Authorization": `Bearer ${token.access_token}`
+								"Authorization": `Bearer ${current_token_data.access_token}`
 							}
 						}, (dres) => {
 							let rawData = '';
@@ -245,6 +245,78 @@ let authenticated = false
 
 const SECRET_NAME = "ftembed"
 
+const setCurrentAccessToken = () => {
+	return new Promise((accept, reject) => {
+		if (current_token_data) {
+			console.log (`setCurrentAccessToken -got it from current_token_data`)
+			accept()
+		} else {
+			// store refresh_token in vault
+			if (process.env.MSI_ENDPOINT && process.env.MSI_SECRET) {
+				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
+				console.log (`setCurrentAccessToken - got MSI_ENDPOINT, restoring refresh_token`) //  ${JSON.stringify(keyvault_token_request)}`)
+				http.get(keyvault_token_request, (msi_res) => {
+					let msi_data = '';
+					msi_res.on('data', (d) => {
+						msi_data+= d
+					});
+		
+					msi_res.on('end', () => {
+						console.log (`msi end ${msi_res.statusCode}`)
+						if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
+							let keyvault_access = JSON.parse(msi_data)
+							let keyvaut_secret_request = Object.assign(url.parse(`https://techdashboard.vault.azure.net/secrets/${SECRET_NAME}/?api-version=2016-10-01`), {headers: {
+								"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`}})
+							
+							console.log (`setCurrentAccessToken - getting from keyvault`)
+
+							https.get(keyvaut_secret_request, (secret_res) => {
+								let vault_data = '';
+								res.on('data', (chunk) => {
+									vault_data += chunk
+								})
+			
+								res.on('end', () => {
+									console.log (`get secret ${res.statusCode} : ${vault_data}`)
+									if (res.statusCode === 200) {
+										console.log ("setCurrentAccessToken - successfully got  refresh token from vault")
+
+										getAccessToken (aad_hostname, {refresh_token: "token??"}).then((auth) => {
+											console.log ('setCurrentAccessToken -  successfully got access token!')
+											accept()
+										}, (err) => {
+											console.log ('setCurrentAccessToken refresh failed, rejecting with:  ' + err.message)
+											reject (err)
+										})
+									} else {
+										console.error(`Got vault setSecret error: ${res.statusCode}`)
+										reject({code: res.statusCode, message: `Got vault setSecret error ${vault_data}`})
+									}
+								
+								})
+							}).on('error', (e) => {
+								console.error(`Got vault setSecret error: ${e.message}`);
+								reject({code: 400, message: `vault setSecret error ${e.message}`})
+							});
+
+						} else {
+							console.error(`Got MSI error: ${msi_res.statusCode}`);
+							reject({code: msi_res.statusCode, message: msi_data})
+						}
+					})
+				}).on('error', (e) => {
+					console.error(`Got MSI error: ${e.message}`)
+					reject({code: 400, message: `Got MSI error ${e.message}`})
+				});
+				
+			} else {
+				console.log ("setCurrentAccessToken - no MSI")
+				reject()
+			}
+		}
+	})
+}
+
 app.get('/auth', function(req, res) {
 	console.log ('/auth ---- called')
 	res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent`)
@@ -252,15 +324,15 @@ app.get('/auth', function(req, res) {
 
 app.get('/', function(req, res) {
 	console.log ('/ ------ called')
-	if (!current_token_data) {
-		res.render('result', {status: "Not Authenticated", message: url.parse(req.url, true).query["message"] || "Press Authenticate to login with PowerBI Pro Master User"})
-	} else {
-		getDashboard(current_token_data).then ((dashbaords) => {
+	setCurrentAccessToken().then (()=> {
+		getDashboard().then ((dashbaords) => {
 			res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
 		}, (err) => {
 			res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
 		})
-	}
+	}, (err) => {
+		res.render('result', {status: "Not Authenticated", message: url.parse(req.url, true).query["message"] || err || "Press Authenticate to login with PowerBI Pro Master User"})
+	})
 })
 
 app.get('/db/:dashboard', function(req, res) {
@@ -268,14 +340,17 @@ app.get('/db/:dashboard', function(req, res) {
 	console.log ('/db ---- called')
 	if (!did) {
 		res.render('result',{status: "ERROR", message: "Please provide dashboard Id"})
-	} else 	if (!current_token_data) {
-		res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent&state=${did}`)
 	} else {
-		getDashboard(current_token_data, did).then ((dashbaord) => {
-			res.render('embedded', {access_token: current_token_data.access_token, embed_url: dashbaord.embedUrl})
+
+		setCurrentAccessToken().then (()=> {
+			getDashboard(did).then ((dashbaord) => {
+				res.render('embedded', {access_token: current_token_data.access_token, embed_url: dashbaord.embedUrl})
+			}, (err) => {
+				res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
+			})
 		}, (err) => {
-			res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
-		})
+			res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent&state=${did}`)
+		})		
 	}
 })
 
