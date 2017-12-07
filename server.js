@@ -84,7 +84,7 @@ const getAccessToken = (hostname, creds) => {
 									console.log (`msi end ${msi_res.statusCode}`)
 									if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
 										let keyvault_access = JSON.parse(msi_data),
-											request_body = `{"value": "${authdata.refresh_token}"`
+											request_body = JSON.stringify({"value": authdata.refresh_token })
 											
 										console.log (`getAccessToken - writing to keyvault_access ${JSON.stringify(keyvault_access)} : body: ${request_body}`)
 
