@@ -280,8 +280,9 @@ const setCurrentAccessToken = () => {
 									console.log (`get secret ${secret_res.statusCode} : ${vault_data}`)
 									if (secret_res.statusCode === 200) {
 										console.log ("setCurrentAccessToken - successfully got  refresh token from vault")
+										let keyvault_secret = JSON.parse(vault_data)
 
-										getAccessToken (aad_hostname, {refresh_token: "token??"}).then((auth) => {
+										getAccessToken (aad_hostname, {refresh_token: keyvault_secret.value}).then((auth) => {
 											console.log ('setCurrentAccessToken -  successfully got access token!')
 											accept()
 										}, (err) => {
@@ -331,7 +332,7 @@ app.get('/', function(req, res) {
 			res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
 		})
 	}, (err) => {
-		res.render('result', {status: "Not Authenticated", message: url.parse(req.url, true).query["message"] || err || "Press Authenticate to login with PowerBI Pro Master User"})
+		res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err)} Press Authenticate to login with PowerBI Pro Master User`})
 	})
 })
 
