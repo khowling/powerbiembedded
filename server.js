@@ -43,7 +43,7 @@ const getAccessToken = (hostname, creds) => {
 			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
 		} else if (creds.refresh_token) {
 			console.log ('getAccessToken - refresh_flow grant_type=refresh_token')
-			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&refresh_token=${encodeURIComponent(creds.refresh_token)}&grant_type=refresh_token`
+			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&client_secret=${encodeURIComponent(client_secret)}&refresh_token=${encodeURIComponent(creds.refresh_token)}&grant_type=refresh_token`
 		}
 
 		let	authcode_req = https.request({
