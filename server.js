@@ -263,7 +263,8 @@ app.get('/callback', function(req, res) {
 					msi_res.on('end', () => {
 						console.log (`msi end ${msi_res.statusCode}`)
 						if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
-							let keyvault_access = JSON.parse(msi_data)
+							let keyvault_access = JSON.parse(msi_data),
+								request_body = `{"value": "${auth.refresh_token}"`
 								
 							console.log (`keyvault_access ${JSON.stringify(keyvault_access)}`)
 
@@ -272,7 +273,9 @@ app.get('/callback', function(req, res) {
 								hostname : "techdashboard.vault.azure.net",
 								path : `/secrets/${SECRET_NAME}?api-version=2016-10-01`,
 								headers: {
-									"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`
+									"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`,
+									'Content-Type': "application/json",
+									'Content-Length': Buffer.byteLength(request_body)
 								}}, (res) => {
 									let rawData = '';
 									res.on('data', (chunk) => {
@@ -286,7 +289,7 @@ app.get('/callback', function(req, res) {
 									
 									})
 								})
-							putreq.write(`{"value": "${auth.refresh_token}"`);
+							putreq.write(request_body);
 							putreq.end();
 								
 						}
