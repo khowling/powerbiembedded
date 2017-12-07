@@ -250,7 +250,7 @@ app.get('/callback', function(req, res) {
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			
 			// store refresh_token in vault
-			/*
+			
 			if (process.env.MSI_ENDPOINT && process.env.MSI_SECRET) {
 				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
 				console.log (`got MSI_ENDPOINT calling ${JSON.stringify(keyvault_token_request)}`)
@@ -296,7 +296,7 @@ app.get('/callback', function(req, res) {
 				});
 				
 			}
-			*/ 
+			
 			current_token_data = auth
 			console.log ('getAccessToken success ')
 			res.redirect ('/')
