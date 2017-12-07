@@ -272,13 +272,13 @@ const setCurrentAccessToken = () => {
 
 							https.get(keyvaut_secret_request, (secret_res) => {
 								let vault_data = '';
-								res.on('data', (chunk) => {
+								secret_res.on('data', (chunk) => {
 									vault_data += chunk
 								})
 			
-								res.on('end', () => {
-									console.log (`get secret ${res.statusCode} : ${vault_data}`)
-									if (res.statusCode === 200) {
+								secret_res.on('end', () => {
+									console.log (`get secret ${secret_res.statusCode} : ${vault_data}`)
+									if (secret_res.statusCode === 200) {
 										console.log ("setCurrentAccessToken - successfully got  refresh token from vault")
 
 										getAccessToken (aad_hostname, {refresh_token: "token??"}).then((auth) => {
@@ -289,8 +289,8 @@ const setCurrentAccessToken = () => {
 											reject (err)
 										})
 									} else {
-										console.error(`Got vault setSecret error: ${res.statusCode}`)
-										reject({code: res.statusCode, message: `Got vault setSecret error ${vault_data}`})
+										console.error(`Got vault setSecret error: ${secret_res.statusCode}`)
+										reject({code: secret_res.statusCode, message: `Got vault setSecret error ${vault_data}`})
 									}
 								
 								})
