@@ -147,7 +147,7 @@ const getAccessToken = (hostname, creds) => {
 
 
 const getDashboard = (did = null) => {
-	console.log (`getDashboard - dashboard ${did} -  ${current_token_data.access_token}`)
+	console.log (`getDashboard - dashboard ${did}`) // -  ${current_token_data.access_token}`)
 	return new Promise((accept, reject) => {
 
 		https.get({
@@ -225,7 +225,7 @@ const getDashboard = (did = null) => {
 							})
 							
 						}).on('error', (e) => {
-							console.log ('getDashboard error ' + JSON.stringify(e))
+							console.log ('getDashboard on error ' + JSON.stringify(e))
 							reject({code: `getDashboard: 400`, message: e})
 						})
 
@@ -332,7 +332,7 @@ app.get('/', function(req, res) {
 			res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
 		})
 	}, (err) => {
-		res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err)} Press Authenticate to login with PowerBI Pro Master User`})
+		res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err) || ""} Press Authenticate to login with PowerBI Pro Master User`})
 	})
 })
 
