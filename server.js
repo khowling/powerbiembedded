@@ -147,7 +147,7 @@ const getAccessToken = (hostname, creds) => {
 
 
 const getDashboard = (did = null) => {
-	console.log (`getDashboard (${did})`)
+	console.log (`getDashboard - dashboard ${did} -  ${current_token_data.access_token}`)
 	return new Promise((accept, reject) => {
 
 		https.get({
@@ -179,7 +179,7 @@ const getDashboard = (did = null) => {
 					}
 
 				} else if (!(dres.statusCode === 200 || dres.statusCode === 201)) {
-					console.log (`getDashboard error ${dres.statusCode} : ${dres.statusMessage} : ${rawData}`)
+					console.log (`getDashboard http error ${dres.statusCode} : ${dres.statusMessage} : ${rawData}`)
 					reject ({code: `getDashboard ${dres.statusCode}`, message: dres.statusMessage})
 				} else {
 
