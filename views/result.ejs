@@ -38,8 +38,9 @@
                 </table>
                 <% } %>
     
+                <% if (status != "Not Authorised") { %>
                 <a  class="btn btn-primary" href="/auth">Authenticate</a>
-                
+                <% } %>
             </div>
             </div>
         </header>

@@ -325,15 +325,19 @@ app.get('/auth', function(req, res) {
 
 app.get('/', function(req, res) {
 	console.log ('/ ------ called')
-	setCurrentAccessToken().then (()=> {
-		getDashboard().then ((dashbaords) => {
-			res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
+	if (url.parse(req.url, true).query["secret"] == "aoitn39eGVOW3692z") {
+		setCurrentAccessToken().then (()=> {
+			getDashboard().then ((dashbaords) => {
+				res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
+			}, (err) => {
+				res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
+			})
 		}, (err) => {
-			res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
+			res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err) || ""} Press Authenticate to login with PowerBI Pro Master User`})
 		})
-	}, (err) => {
-		res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err) || ""} Press Authenticate to login with PowerBI Pro Master User`})
-	})
+	} else {
+		res.render('result', {status: "Not Authorised", message: "See your admin to get authorised"}) 
+	}
 })
 
 app.get('/db/:dashboard', function(req, res) {
@@ -364,7 +368,7 @@ app.get('/callback', function(req, res) {
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			console.log ('success, got token ')
-			res.redirect ('/')
+			res.redirect ('/?secret=aoitn39eGVOW3692z')
 			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
 			
 		}, (err) => {
