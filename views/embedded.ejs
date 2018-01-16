@@ -12,17 +12,18 @@
                 type: 'report',
                 accessToken: "<%= access_token %>",
                 embedUrl: "<%= embed_url %>",
-                permissions: pbi.models.Permissions.All,
+                permissions: powerbi.models.Permissions.All,
                 settings: {
                     filterPaneEnabled: false,
                     navContentPaneEnabled: false
                 }
             });
         } 
-
+/*
         client.onerror = function (e) {
             console.log("Network Error: " + this.statusText);
         }
+*/
     </script>
 </body>
 </html>
