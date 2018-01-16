@@ -9,6 +9,7 @@ app.use(express.static('public'))
 app.set('view engine', 'ejs');
 
 const
+	secret = process.env.SECRET,
 	client_id = process.env.CLIENT_ID,
 	client_secret = process.env.CLIENT_SECRET,
 	callback_host = process.env.CALLBACK_HOST || 'http://localhost:5000',
@@ -325,7 +326,7 @@ app.get('/auth', function(req, res) {
 
 app.get('/', function(req, res) {
 	console.log ('/ ------ called')
-	if (url.parse(req.url, true).query["secret"] == "aoitn39eGVOW3692z") {
+	if (!secret || url.parse(req.url, true).query["secret"] == secret) {
 		setCurrentAccessToken().then (()=> {
 			getDashboard().then ((dashbaords) => {
 				res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
@@ -368,7 +369,7 @@ app.get('/callback', function(req, res) {
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			console.log ('success, got token ')
-			res.redirect ('/?secret=aoitn39eGVOW3692z')
+			res.redirect (`/` + secret && `?secret=${secret}` || '')
 			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
 			
 		}, (err) => {
