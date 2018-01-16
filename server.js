@@ -361,7 +361,7 @@ app.get('/db/:dashboard', function(req, res) {
 })
 
 app.get('/callback', function(req, res) {
-	console.log ('/callback - looking for authorisation code')
+	console.log (`/callback - looking for authorisation code`)
 	let code = url.parse(req.url, true).query["code"]
 
 	if (code) {
@@ -369,7 +369,7 @@ app.get('/callback', function(req, res) {
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			console.log ('success, got token ')
-			res.redirect (`/` + secret && `?secret=${secret}` || '')
+			res.redirect (`/` + (secret && `?secret=${secret}` || ''))
 			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
 			
 		}, (err) => {
