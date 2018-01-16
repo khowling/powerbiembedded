@@ -11,7 +11,7 @@
             var dashboard = powerbi.embed(document.getElementById('dashboardContainer'), {
                 type: 'report',
                 accessToken: "<%= access_token %>",
-                tokenType: window['powerbi-client'].models.TokenType.Embed,
+                tokenType: window['powerbi-client'].models.TokenType.accessToken,
                 embedUrl: "<%= embed_url %>",
                 permissions: window['powerbi-client'].models.Permissions.All,
                 settings: {
