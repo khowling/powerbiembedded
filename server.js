@@ -10,6 +10,8 @@ app.set('view engine', 'ejs');
 
 const
 	secret = process.env.SECRET,
+	SECRET_NAME = process.env.VAULT_SECRET_KEY,
+	VAULT_NAME = process.env.VAULT_NAME,
 	client_id = process.env.CLIENT_ID,
 	client_secret = process.env.CLIENT_SECRET,
 	callback_host = process.env.CALLBACK_HOST || 'http://localhost:5000',
@@ -18,6 +20,7 @@ const
 	embed_username = process.env.EMBED_USERNAME,
 	embed_password = process.env.EMBED_PASSWORD,
 	aad_hostname = 'login.microsoftonline.com',
+	pbi_hostname = 'api.powerbi.com',
 	powerbi_service_resource_v1 = 'https://analysis.windows.net/powerbi/api',
 	powerbi_service_scope_v2 = 'https://graph.microsoft.com/mail.send', 
 	aad_token_endpoint = `/${client_directory}/oauth2/token`,
@@ -91,7 +94,7 @@ const getAccessToken = (hostname, creds) => {
 
 										let putreq = https.request({
 											method: "PUT",
-											hostname : "techdashboard.vault.azure.net",
+											hostname : `${VAULT_NAME}.vault.azure.net`,
 											path : `/secrets/${SECRET_NAME}?api-version=2016-10-01`,
 											headers: {
 												"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`,
@@ -152,7 +155,7 @@ const getDashboard = (did = null) => {
 	return new Promise((accept, reject) => {
 
 		https.get({
-			hostname: 'api.powerbi.com',
+			hostname: pbi_hostname,
 			path: `/v1.0/myorg/groups`,
 			headers: {
 				"Authorization": `Bearer ${current_token_data.access_token}`
@@ -193,7 +196,7 @@ const getDashboard = (did = null) => {
 					} else {
 
 						https.get({
-							hostname: 'api.powerbi.com',
+							hostname: pbi_hostname,
 							path: `/v1.0/myorg/groups/${selected_group.id}/reports`,
 							headers: {
 								"Authorization": `Bearer ${current_token_data.access_token}`
@@ -216,7 +219,8 @@ const getDashboard = (did = null) => {
 										if (!selected_dashboard) {
 											reject({code: 400, message: `cannot find powerbi dashboard ${did} in subscription`})
 										} else {
-											accept(selected_dashboard)
+											// object literal shorthand notation
+											accept({selected_group, selected_dashboard})
 										}
 									} else {
 										console.log (`getDashboard - returning ${dashboards.length} dashboards`)
@@ -243,9 +247,6 @@ const getDashboard = (did = null) => {
 
 let authenticated = false
 
-
-const SECRET_NAME = "ftembed"
-
 const setCurrentAccessToken = () => {
 	return new Promise((accept, reject) => {
 		if (current_token_data) {
@@ -266,7 +267,7 @@ const setCurrentAccessToken = () => {
 						console.log (`msi end ${msi_res.statusCode}`)
 						if(msi_res.statusCode === 200 || msi_res.statusCode === 201) {
 							let keyvault_access = JSON.parse(msi_data)
-							let keyvaut_secret_request = Object.assign(url.parse(`https://techdashboard.vault.azure.net/secrets/${SECRET_NAME}/?api-version=2016-10-01`), {headers: {
+							let keyvaut_secret_request = Object.assign(url.parse(`https://${VAULT_NAME}.vault.azure.net/secrets/${SECRET_NAME}/?api-version=2016-10-01`), {headers: {
 								"Authorization": `${keyvault_access.token_type} ${keyvault_access.access_token}`}})
 							
 							console.log (`setCurrentAccessToken - getting from keyvault`)
@@ -341,16 +342,66 @@ app.get('/', function(req, res) {
 	}
 })
 
+const generateEmbedToken = (selected_group, selected_dashboard) => {
+  return new Promise((accept, reject) => {
+	let	embedtoken_body = JSON.stringify({
+		"accessLevel": "View"
+	}),
+	embedtoken_req = https.request({
+		hostname: pbi_hostname,
+		path: `/v1.0/myorg/groups/${selected_group.id}/reports/${selected_dashboard.id}/GenerateToken`,
+		headers: {
+			"Authorization": `Bearer ${current_token_data.access_token}`,
+			"Content-Type": "application/json",
+			'Content-Length': Buffer.byteLength(embedtoken_body)
+		},
+		method: 'POST',
+	}, (res) => {
+		let rawData = '';
+		res.on('data', (chunk) => {
+			rawData += chunk
+		})
+
+		res.on('end', () => {
+			if(!(res.statusCode === 200 || res.statusCode === 201)) {
+				reject({code: res.statusCode, message: rawData})
+			} else {
+				accept(JSON.parse(rawData))
+			}
+		})
+	}).on('error', (e) => {
+		reject({code: 400, message: e})
+	})
+	embedtoken_req.write(embedtoken_body)
+	embedtoken_req.end()
+  })
+}
+
+
 app.get('/db/:dashboard', function(req, res) {
 	let did = req.params.dashboard
 	console.log ('/db ---- called')
 	if (!did) {
 		res.render('result',{status: "ERROR", message: "Please provide dashboard Id"})
 	} else {
-
+		// get access_token
 		setCurrentAccessToken().then (()=> {
-			getDashboard(did).then ((dashbaord) => {
-				res.render('embedded', {access_token: current_token_data.access_token, embed_url: dashbaord.embedUrl})
+			// get dashboard embedUrl
+			getDashboard(did).then (({selected_group, selected_dashboard}) => {
+				
+				if (false) { 	
+					// App Owns Data, (typically an ISV scenario), a "Power BI Embedded" license is required
+					// get embed token for powerbi content, You will need to configure the embed token to account for the user and role
+					generateEmbedToken (selected_group, selected_dashboard).then(embedtoken => {
+						//console.log (`got embedToken : ${JSON.stringify(embedtoken)}`)
+						res.render('embedded', {access_token: "", embed_token: embedtoken.token, embed_url: selected_dashboard.embedUrl})
+					}, (err) => {
+						res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
+					})
+				} else { 		
+					// User Owns Data, users login as themselfs, they have powerbi pro licences, and are inside your organisation
+					res.render('embedded', {embed_token: "", access_token: current_token_data.access_token, embed_url: selected_dashboard.embedUrl})
+				}
 			}, (err) => {
 				res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
 			})

@@ -8,12 +8,18 @@
     <script src="/powerbi.js"></script>
     <script>
         window.onload = function () {
+            let models = window['powerbi-client'].models,
+                accessToken =  "<%= access_token %>", // User Owns Data
+                embedToken =  "<%= embed_token %>", // App Owns Data
+                tokenType = accessToken.length >0 ? models.TokenType.Aad : models.TokenType.Embed,
+                token = accessToken.length >0 ? accessToken : embedToken
+
             var dashboard = powerbi.embed(document.getElementById('dashboardContainer'), {
                 type: 'report',
-                accessToken: "<%= access_token %>",
-                tokenType: window['powerbi-client'].models.TokenType.accessToken,
+                accessToken: token,
+                tokenType: tokenType,
                 embedUrl: "<%= embed_url %>",
-                permissions: window['powerbi-client'].models.Permissions.All,
+                permissions: models.Permissions.All,
                 settings: {
                     filterPaneEnabled: false,
                     navContentPaneEnabled: false
