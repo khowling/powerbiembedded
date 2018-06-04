@@ -11,9 +11,18 @@
     
         <header class="page-header">
             <div class="row">
+                
                 <div class="col-md-11 col-md-offset-1">
-                <h1>Embedded Dashboard - <%= status %></h1>
-                <p><%= message %></p>
+                
+                <% if (status === "error") { %>
+                <div class="col-md-10 col-md-offset-1">
+                    <div class="alert alert-danger">
+                        <strong><%=status %>:</strong> <%=message %>
+                    </div>
+                </div>
+                <% } else { %>
+                <h1>Embedded Dashboard</h1>
+                <p><strong><%= status %>:</strong><%= message %></p>
 
                 <% if (typeof dashbaords != "undefined") { %>
                 <table class="table">
@@ -40,6 +49,7 @@
     
                 <% if (status != "Not Authorised") { %>
                 <a  class="btn btn-primary" href="/auth">Authenticate</a>
+                <% } %>
                 <% } %>
             </div>
             </div>

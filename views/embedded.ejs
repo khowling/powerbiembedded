@@ -14,7 +14,18 @@
                 tokenType = accessToken.length >0 ? models.TokenType.Aad : models.TokenType.Embed,
                 token = accessToken.length >0 ? accessToken : embedToken
 
-            var dashboard = powerbi.embed(document.getElementById('dashboardContainer'), {
+            var filters = "<%= filters %>".split("&").map(f=> { return {
+                    $schema: "http://powerbi.com/product/schema#basic",
+                    target: {
+                        table: "callmetrics",
+                        column: f.split("=")[0]
+                    },
+                    operator: "In",
+                    values: [f.split("=")[1]]
+                    }})
+
+            console.log (JSON.stringify(filters))
+            var report = powerbi.embed(document.getElementById('dashboardContainer'), {
                 type: 'report',
                 accessToken: token,
                 tokenType: tokenType,
@@ -23,8 +34,10 @@
                 settings: {
                     filterPaneEnabled: false,
                     navContentPaneEnabled: false
-                }
+                },
+                filters: filters
             });
+
         } 
 /*
         client.onerror = function (e) {

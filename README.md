@@ -60,4 +60,12 @@ $env:EMBED_PASSWORD = "<Azure AD password>"
 
 Currently, this example uses V1 of the Active directory endpoints, and V1 of the powebi api.  At the time of development, this was the only way to successfully display content, I will look to upgrade to V2 once it is fully supported.
 
+Limitation: The v2.0 endpoint issues access tokens only for (1) The app that requested the token, (2) The Outlook APIs, (3) The Graph APIs.  NOT Power BI!
 https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-v2-compare
+
+### To update to v2
+
+* Register a new `Converged` App in the 'My Applications' portal: `https://apps.dev.microsoft.com/`
+* Add the scope
+* 
+

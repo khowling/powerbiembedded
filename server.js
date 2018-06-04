@@ -27,6 +27,7 @@ const
 	aad_auth_endpoint = `/${client_directory}/oauth2/authorize`,
 	aad_token_endpoint_v2 = `/${client_directory}/oauth2/v2.0/token`,
 	aad_auth_endpoint_v2 = `/${client_directory}/oauth2/v2.0/authorize`,
+	oauth2_authorise_flow_v1 = `https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent`,
 	powerbi_group_name = process.env.POWERBI_GROUP_NAME
 
 let	current_token_data
@@ -44,7 +45,8 @@ const getAccessToken = (hostname, creds) => {
 			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&username=${encodeURIComponent(creds.user)}&password=${creds.password}&grant_type=password`
 		} else if (creds.code) {
 			console.log ('getAccessToken - authorization_code_flow grant_type=authorization_code (supports refresh, user interaction, server can keep secret: ') //+ creds.code)
-			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
+			flow_body = `client_id=${client_id}&scope=${encodeURIComponent(powerbi_service_resource_v1)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
+			//flow_body = `client_id=${client_id}&scope=${encodeURIComponent(powerbi_service_resource_v1)}&code=${encodeURIComponent(creds.code)}&client_secret=${encodeURIComponent(client_secret)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(callback_host+'/callback')}`
 		} else if (creds.refresh_token) {
 			console.log ('getAccessToken - refresh_flow grant_type=refresh_token')
 			flow_body = `client_id=${client_id}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&client_secret=${encodeURIComponent(client_secret)}&refresh_token=${encodeURIComponent(creds.refresh_token)}&grant_type=refresh_token`
@@ -76,7 +78,7 @@ const getAccessToken = (hostname, creds) => {
 
 						// store refresh_token in vault
 						if (authdata.refresh_token && process.env.MSI_ENDPOINT && process.env.MSI_SECRET) {
-							let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
+							let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
 							console.log (`getAccessToken - got MSI_ENDPOINT, storing refresh_token`) //  ${JSON.stringify(keyvault_token_request)}`)
 							http.get(keyvault_token_request, (msi_res) => {
 								let msi_data = '';
@@ -188,7 +190,7 @@ const getDashboard = (did = null) => {
 				} else {
 
 					let groups = JSON.parse(rawData).value;
-					console.log (`successfully got all groups: ${groups.length}`) // ${JSON.stringify(groups)}`)
+					//console.log (`successfully got all groups: ${groups.length}`) // ${JSON.stringify(groups)}`)
 
 					let selected_group = groups.find(g => g.name == powerbi_group_name)
 					if (!selected_group) {
@@ -255,7 +257,7 @@ const setCurrentAccessToken = () => {
 		} else {
 			// store refresh_token in vault
 			if (process.env.MSI_ENDPOINT && process.env.MSI_SECRET) {
-				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}/?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
+				let keyvault_token_request = Object.assign(url.parse(`${process.env.MSI_ENDPOINT}?resource=${encodeURIComponent("https://vault.azure.net")}&api-version=2017-09-01`), {headers: {"secret": process.env.MSI_SECRET }})
 				console.log (`setCurrentAccessToken - got MSI_ENDPOINT, restoring refresh_token`) //  ${JSON.stringify(keyvault_token_request)}`)
 				http.get(keyvault_token_request, (msi_res) => {
 					let msi_data = '';
@@ -320,9 +322,18 @@ const setCurrentAccessToken = () => {
 	})
 }
 
+app.use((req, res, next) => {
+	if (!process.env.CLIENT_DIRECTORY || !process.env.CLIENT_ID || !process.env.CLIENT_SECRET ||!process.env.POWERBI_GROUP_NAME ) {
+		res.render('result',{status: "error", title: "ERROR missing configuration", message: `require CLIENT_DIRECTORY, CLIENT_ID, CLIENT_SECRET, POWERBI_GROUP_NAME`})
+	} else {
+		next()
+	}
+})
+
+
 app.get('/auth', function(req, res) {
-	console.log ('/auth ---- called')
-	res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent`)
+	console.log (`/auth ---- redirect: ${oauth2_authorise_flow_v1}`)
+	res.redirect(oauth2_authorise_flow_v1)
 })
 
 app.get('/', function(req, res) {
@@ -330,15 +341,15 @@ app.get('/', function(req, res) {
 	if (!secret || url.parse(req.url, true).query["secret"] == secret) {
 		setCurrentAccessToken().then (()=> {
 			getDashboard().then ((dashbaords) => {
-				res.render('result', {status: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
+				res.render('result', {status: "success", title: "Successfully Authenticated", message: "Now call with https://<host>/db/<dashboard Id>", dashbaords: dashbaords})
 			}, (err) => {
-				res.render('result',{status: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
+				res.render('result',{status: "warn", title: "ERROR Retreiving Dashbaords", message: `${err.code}: ${err.message}`})
 			})
 		}, (err) => {
-			res.render('result', {status: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err) || ""} Press Authenticate to login with PowerBI Pro Master User`})
+			res.render('result', {status: "noauth", title: "Not Authenticated", message: `${url.parse(req.url, true).query["message"] || JSON.stringify(err) || ""} Press Authenticate to login with PowerBI Pro Master User`})
 		})
 	} else {
-		res.render('result', {status: "Not Authorised", message: "See your admin to get authorised"}) 
+		res.render('result', {status: "noauth", title: "Not Authorised", message: "See your admin to get authorised"}) 
 	}
 })
 
@@ -382,45 +393,52 @@ app.get('/db/:dashboard', function(req, res) {
 	let did = req.params.dashboard
 	console.log ('/db ---- called')
 	if (!did) {
-		res.render('result',{status: "ERROR", message: "Please provide dashboard Id"})
+		res.render('result',{status: "warn", message: "Please provide dashboard Id"})
 	} else {
 		// get access_token
 		setCurrentAccessToken().then (()=> {
 			// get dashboard embedUrl
 			getDashboard(did).then (({selected_group, selected_dashboard}) => {
-				
+				console.log (`filters : ${require('url').parse(req.url).query}`)
 				if (false) { 	
 					// App Owns Data, (typically an ISV scenario), a "Power BI Embedded" license is required
 					// get embed token for powerbi content, You will need to configure the embed token to account for the user and role
 					generateEmbedToken (selected_group, selected_dashboard).then(embedtoken => {
 						//console.log (`got embedToken : ${JSON.stringify(embedtoken)}`)
-						res.render('embedded', {access_token: "", embed_token: embedtoken.token, embed_url: selected_dashboard.embedUrl})
+						res.render('embedded', {access_token: "", embed_token: embedtoken.token, embed_url: selected_dashboard.embedUrl, filters: require('url').parse(req.url).query})
 					}, (err) => {
-						res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
+						res.render('result',{status: "error", message: `${err.code}: ${err.message}`})
 					})
 				} else { 		
 					// User Owns Data, users login as themselfs, they have powerbi pro licences, and are inside your organisation
-					res.render('embedded', {embed_token: "", access_token: current_token_data.access_token, embed_url: selected_dashboard.embedUrl})
+					res.render('embedded', {embed_token: "", access_token: current_token_data.access_token, embed_url: selected_dashboard.embedUrl, filters: require('url').parse(req.url).query})
 				}
 			}, (err) => {
-				res.render('result',{status: "ERROR", message: `${err.code}: ${err.message}`})
+				res.render('result',{status: "error", message: `${err.code}: ${err.message}`})
 			})
 		}, (err) => {
-			res.redirect(`https://${aad_hostname}${aad_auth_endpoint}?client_id=${client_id}&redirect_uri=${encodeURIComponent(callback_host+'/callback')}&resource=${encodeURIComponent(powerbi_service_resource_v1)}&response_type=code&prompt=consent&state=${did}`)
+			// no access token, run oauth2
+			console.log ('/db/xxxx - redirect')
+			res.redirect(oauth2_authorise_flow_v1 + `&state=${did}`)
 		})		
 	}
 })
 
 app.get('/callback', function(req, res) {
 	console.log (`/callback - looking for authorisation code`)
-	let code = url.parse(req.url, true).query["code"]
+	let code = url.parse(req.url, true).query["code"],
+		state = url.parse(req.url, true).query["state"]
 
 	if (code) {
 		
 		console.log ('/callback - got code, calling getAccessToken (authflow)')
 		getAccessToken (aad_hostname, {code: code}).then((auth) => {
 			console.log ('success, got token ')
-			res.redirect (`/` + (secret && `?secret=${secret}` || ''))
+			if (state) {
+				res.redirect (`/db/${state}`)
+			} else {
+				res.redirect (`/` + (secret && `?secret=${secret}` || ''))
+			}
 			//res.render('result', {status: "SUCCESS", message: "Authorised, now call with https://<host>/dashboard/<dashboard Id>"})
 			
 		}, (err) => {
@@ -439,4 +457,4 @@ app.get('/callback', function(req, res) {
 
 const port = process.env.PORT || 5000
 app.listen(port);
-console.log('port is the magic port');
+console.log(`${port} is the magic port`);
