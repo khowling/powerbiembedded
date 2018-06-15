@@ -14,15 +14,23 @@
                 tokenType = accessToken.length >0 ? models.TokenType.Aad : models.TokenType.Embed,
                 token = accessToken.length >0 ? accessToken : embedToken
 
-            var filters = "<%= filters %>".split("&").map(f=> { return {
+            var filters = [],
+                urlfilter = "<%= filters %>"
+                
+            if ( urlfilter.length > 5) {
+              filters = urlfilter.split("&").map(f=> { 
+                let farray = f.split("=")
+                return {
                     $schema: "http://powerbi.com/product/schema#basic",
                     target: {
-                        table: "callmetrics",
-                        column: f.split("=")[0]
+                        table:  farray[0].split(".")[0],
+                        column: farray[0].split(".")[1]
                     },
                     operator: "In",
-                    values: [f.split("=")[1]]
-                    }})
+                    values: [decodeURIComponent(farray[1])]
+                }
+              })
+            }
 
             console.log (JSON.stringify(filters))
             var report = powerbi.embed(document.getElementById('dashboardContainer'), {
